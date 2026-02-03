@@ -6,28 +6,73 @@ const User = require("../models/User");
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    // check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
-    // hash password
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-    // create user
     const user = new User({
       name,
       email,
       password: hashedPassword,
+      role: 'user'
     });
     await user.save();
-    // send response (no password)
+    
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+    
     res.status(201).json({
       message: "User created",
+      token,
       user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) {
     console.error("Register error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.registerAdmin = async (req, res) => {
+  try {
+    const { name, email, password, adminSecret } = req.body;
+    
+    if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({ message: "Invalid admin secret" });
+    }
+    
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+    
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: 'admin'
+    });
+    await user.save();
+    
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+    
+    res.status(201).json({
+      message: "Admin created",
+      token,
+      user: { id: user._id, name: user.name, email: user.email, role: user.role }
+    });
+  } catch (error) {
+    console.error("Admin register error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -57,6 +102,16 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error("Login error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({}, 'id name email role');
+    res.json(users);
+  } catch (error) {
+    console.error("Get users error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
